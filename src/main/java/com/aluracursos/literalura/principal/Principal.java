@@ -1,38 +1,59 @@
 package com.aluracursos.literalura.principal;
 
+import com.aluracursos.literalura.modelo.Autor;
 import com.aluracursos.literalura.modelo.Dados;
 import com.aluracursos.literalura.modelo.DadosLivros;
+import com.aluracursos.literalura.modelo.Livro;
+import com.aluracursos.literalura.repositorio.AutorRepository;
+import com.aluracursos.literalura.repositorio.LivroRepository;
 import com.aluracursos.literalura.servico.ConsumoAPI;
 import com.aluracursos.literalura.servico.ConverteDados;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
 
 import javax.naming.NameNotFoundException;
-import java.util.Comparator;
-import java.util.DoubleSummaryStatistics;
-import java.util.Optional;
-import java.util.Scanner;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class Principal {
+
+    @Autowired
+    private final LivroRepository livroRepositorio;
+    @Autowired
+    private final AutorRepository autorRepositorio;
+
     private static final String URL_BASE = "https://gutendex.com/books/";
-    private ConsumoAPI consumoAPI = new ConsumoAPI();
-    private ConverteDados conversor = new ConverteDados();
-    private Scanner teclado = new Scanner(System.in);
+    private final ConsumoAPI consumoAPI = new ConsumoAPI();
+    private final ConverteDados conversor = new ConverteDados();
+    private final Scanner teclado = new Scanner(System.in);
     private String json;
-    private String menu = """
-            ------------
-            Escolha a opção através do seu número:
-            1- Buscar livro por título
-            2- Top 10 livros mais baixados
-            3- Exibir estatísticas de downloads
-            4- Buscar autor
-            0- Sair
-            """;
+
+    public Principal(LivroRepository livroRepositorio, AutorRepository autorRepositorio) {
+        this.livroRepositorio = livroRepositorio;
+        this.autorRepositorio = autorRepositorio;
+    }
 
     public void mostraMenu() throws NameNotFoundException {
         var opcaoEscolhida = -1;
 
         while (opcaoEscolhida != 0) {
             json = consumoAPI.obterDados(URL_BASE);
+
+            String menu = """
+                    ------------
+                    Escolha a opção através do seu número:
+                    1- procurar livro por título
+                    2- top 10 livros mais baixados
+                    3- exibir estatísticas de downloads totais
+                    4- procurar autor
+                    5- listar livros registrados
+                    6- lista de autores registrados
+                    7- listar autores por ano de nascimento
+                    8- listar autores por intervalo de anos
+                    9- listar autores vivos por ano
+                    10- listar livros por idioma
+                    0- sair
+                    """;
             System.out.println(menu);
 
             opcaoEscolhida = teclado.nextInt();
@@ -40,11 +61,17 @@ public class Principal {
 
             switch (opcaoEscolhida) {
                 case 1 -> buscarLivroPorTitulo();
-                case 2 -> listarTop10LivrosMaisBaixados();
-                case 3 -> exibirEstatisticasDeDownloads();
-                case 4 -> buscarAutor();
-                case 0 -> System.out.println("Até logo...");
-                default -> System.out.println("Opção inválida");
+                case 2 -> listarTop10LivrosMaisBaixados(); //extra
+                case 3 -> exibirEstatisticasDeDownloads(); //extra
+                case 4 -> buscarAutor(); //extra
+                case 5 -> listarLivrosRegistrados();
+                case 6 -> listarAutoresRegistrados();
+                case 7 -> listarAutoresPorAnoDeNascimento(); //extra
+                case 8 -> listarAutoresPorIntervaloDeAnos(); //extra
+                case 9 -> listarAutoresVivosEnAnoEspecifico();
+                case 10 -> listarLivrosPorIdioma();
+                case 0 -> System.out.println("Hasta luego...");
+                default -> System.out.println("Opcion invalida");
             }
         }
 
@@ -60,8 +87,12 @@ public class Principal {
         Optional<DadosLivros> livro = dadosBusca.resultados().stream().filter(l -> l.autor().get(0).nome().toUpperCase().contains(nomeAutor.toUpperCase())).findFirst();
 
         if(livro.isPresent()){
-            DadosLivros dadosLivros = encontrarLivro(livro);
-            System.out.println(dadosLivros.autor());
+            try{
+                DadosLivros dadosLivros = encontrarLivro(livro);
+                System.out.println(dadosLivros.autor());
+            } catch (NullPointerException e){
+                throw new NullPointerException();
+            }
         } else {
             throw new NameNotFoundException("Nome de autor não encontrado.");
         }
@@ -112,13 +143,93 @@ public class Principal {
         System.out.println(dadosLivros);
     }
 
-    private DadosLivros encontrarLivro(Optional<DadosLivros> libroBuscado) {
-        if (libroBuscado.isPresent()) {
+    private DadosLivros encontrarLivro(Optional<DadosLivros> livroBuscado) {
+        if (livroBuscado.isPresent()) {
             System.out.println("Livro encontrado ");
-            return libroBuscado.get();
+            return livroBuscado.get();
         } else {
             System.out.println("Livro não encontrado");
             return null;
+        }
+    }
+
+    private void listarLivrosRegistrados() {
+        livroRepositorio.findAll(Sort.by(Sort.Direction.ASC, "titulo")).forEach(System.out::println);
+    }
+
+    private void listarAutoresRegistrados() {
+        autorRepositorio.findAll().forEach(System.out::println);
+    }
+
+    /* Consultas com datas (Autores) */
+    private void listarAutoresPorAnoDeNascimento() {
+        System.out.println("Insira o ano de nascimento do(s) autor(es) que deseja buscar: ");
+        var anoNascimento = teclado.nextLine();
+
+        if (!anoNascimento.isBlank()) {
+            List<Autor> autoresBuscados = autorRepositorio.findByDataDeNascimento(Integer.valueOf(anoNascimento));
+
+            if (!autoresBuscados.isEmpty()) {
+                autoresBuscados.forEach(autor -> System.out.println(autor.toString()));
+            } else {
+                System.out.println("Não foram encontrados autores nascidos neste ano");
+            }
+        } else {
+            System.out.println("Campo de texto vazio, por favor, tente novamente e insira um número válido.");
+        }
+    }
+
+    private void listarAutoresPorIntervaloDeAnos() {
+        System.out.println("Insira o ano inicial do intervalo: ");
+        var anoInicial = teclado.nextLine();
+
+        System.out.println("Insira o ano final do intervalo: ");
+        var anoFinal = teclado.nextLine();
+
+        if (!(anoInicial.isBlank() || anoFinal.isBlank())) {
+            List<Autor> autoresBuscados = autorRepositorio.findByDataDeNascimentoGreaterThanEqualAndDataDeFalecimentoLessThan(
+                    Integer.valueOf(anoInicial), Integer.valueOf(anoFinal));
+
+            if (!autoresBuscados.isEmpty()) {
+                autoresBuscados.forEach(autor -> System.out.println(autor.toString()));
+            } else {
+                System.out.println("Nenhum autor vivo foi encontrado neste intervalo de anos.");
+            }
+        } else {
+            System.out.println("Campo(s) de texto vazio(s), por favor tente novamente e digite um número inteiro válido em cada campo.");
+        }
+    }
+
+    private void listarAutoresVivosEnAnoEspecifico() {
+        System.out.println("Digite o ano vivo de autor(es) que você deseja procurar: ");
+        var anoVivo = teclado.nextLine();
+
+        if (!anoVivo.isBlank()) {
+            List<Autor> autoresBuscados = autorRepositorio.findByDataDeNascimentoLessThanEqualAndDataDeFalecimentoGreaterThan(
+                    Integer.valueOf(anoVivo),
+                    Integer.valueOf(anoVivo));
+
+            if (!autoresBuscados.isEmpty()) {
+                autoresBuscados.forEach(autor -> System.out.println(autor.toString()));
+            } else {
+                System.out.println("Nenhum autor vivo encontrado este ano.");
+            }
+        } else {
+            System.out.println("Campo de texto vazio, tente novamente e digite um número inteiro válido.");
+        }
+    }
+
+    private void listarLivrosPorIdioma() {
+        System.out.println("Digite o idioma que você deseja procurar os livros: ");
+        var idioma = teclado.nextLine();
+
+        if (!idioma.isBlank()) {
+            List<Livro> livrosPorIdioma = livroRepositorio.findByIdiomaContainingIgnoreCase(idioma);
+            livrosPorIdioma.forEach(livro -> {
+                System.out.println(livro.toString());
+            });
+        } else {
+            System.out.println("Campo de texto vazio, tente novamente e digite um número inteiro válido.");
         }
     }
 }
